@@ -1,0 +1,27 @@
+[project]
+name = "mesh-network-tools"
+version = "0.1.0"
+requires-python = ">=3.9"
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "N",      # pep8-naming
+    "I",      # isort
+    "C4",     # flake8-comprehensions
+]
+ignore = [
+    "E501",   # line too long
+    "E741",   # ambiguous variable name
+    "UP031",  # percent format → f-string
+]
+
