@@ -1,6 +1,3 @@
-[submodule "MeshCore"]
-	path = MeshCore
-	url = https://github.com/meshcore-dev/MeshCore
 [submodule "mesh-network-core"]
 	path = mesh-network-core
 	url = git@github.com:Tr1glav/mesh-network-core.git
