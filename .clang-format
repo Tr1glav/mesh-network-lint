@@ -8,7 +8,15 @@ AllowShortLoopsOnASingleLine: false
 AllowShortLambdasOnASingleLine: false
 AlignEscapedNewlines: Right
 AlignOperands: true
-AlignTrailingComments: true
+# Записано структурой, а не «true», нарочно: булева форма устарела, и версии понимают её
+# по-разному — на 18 комментарии оставались где стояли, на 22 та же «true» значит
+# Kind: Always. Отсюда и брались 244 строки разницы на 33 файлах на одной лишь версии
+# форматтера. Явный Always выбран, а не Leave: Leave сохраняет то выравнивание, которое
+# уже есть в файле, а значит не сводит к одному виду две копии lib/meshcore (они из-за
+# этого и разошлись — в одной комментарии выровнены, в другой нет).
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 0
 AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: true
 BreakBeforeBraces: Attach

@@ -1,0 +1,19 @@
+[submodule "MeshCore"]
+	path = MeshCore
+	url = https://github.com/meshcore-dev/MeshCore
+[submodule "mesh-network-core"]
+	path = mesh-network-core
+	url = git@github.com:Tr1glav/mesh-network-core.git
+	branch = main
+[submodule "mesh-network-tools"]
+	path = mesh-network-tools
+	url = git@github.com:Tr1glav/mesh-network-tools.git
+	branch = prod
+[submodule "meshcore-fork"]
+	path = meshcore-fork
+	url = git@github.com:Tr1glav/meshcore-fork.git
+	branch = develop
+[submodule "tdeck"]
+	path = tdeck
+	url = git@github.com:Tr1glav/tdeck.git
+	branch = prod

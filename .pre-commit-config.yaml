@@ -1,0 +1,18 @@
+# Надстройка: своего C/C++ здесь нет, только конфиги и tools/. Исходники прошивок лежат
+# в сабмодулях, и у каждого свой .pre-commit-config.yaml — хук срабатывает там, где идёт
+# коммит.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff check
+        entry: ruff
+        args: [check, --fix]
+        language: system
+        types_or: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: ruff
+        args: [format]
+        language: system
+        types_or: [python]

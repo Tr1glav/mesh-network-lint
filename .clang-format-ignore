@@ -1,0 +1,9 @@
+# Сгенерированные заголовки: вид им задаёт генератор, и правка форматтером исчезнет при
+# следующей сборке, оставив format-check красным. То же перечислено в Makefile
+# (CXX_GENERATED) — здесь для редактора и pre-commit, которые ходят мимо Makefile.
+meshcore-fork/lib/meshcore/include/build_info.h
+meshcore-fork/lib/meshcore/include/ca_bundle.h
+meshcore-fork/lib/meshcore/include/cyrillic_glyphs.h
+meshcore-fork/lib/meshcore/include/web_assets.h
+tdeck/lib/meshcore/include/build_info.h
+tdeck/lib/meshcore/include/cyrillic_glyphs.h
