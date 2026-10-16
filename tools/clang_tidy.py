@@ -35,6 +35,11 @@ import sys
 DROP_FLAGS = {"-c", "-MMD", "-MD", "-MP"}
 # Флаги, забирающие следующий аргумент.
 DROP_WITH_VALUE = {"-o", "-MF", "-MT", "-MQ"}
+# Запасной список на случай, если спросить у clang нельзя (его нет рядом с clang-tidy —
+# так бывает в CI, где ставят только clang-tidy). Это флаги xtensa-gcc, на которых clang
+# останавливается с «unknown argument». Список заведомо неполный: он нужен ровно чтобы
+# проверка не падала целиком, а основной путь — проба у самого clang.
+GCC_ONLY_PREFIXES = ("-mlongcalls", "-mtext-section-literals", "-mfix-esp32", "-fno-tree-", "-fstrict-volatile-")
 
 
 def language_of(path):
@@ -45,11 +50,20 @@ def flag_accepted(clang, flag, lang, cache):
     """Понимает ли clang этот флаг. Спрашиваем у него самого и запоминаем ответ."""
     key = (flag, lang)
     if key not in cache:
-        probe = subprocess.run(
-            [clang, "-fsyntax-only", flag, "-x", lang, os.devnull],
-            capture_output=True,
-            text=True,
-        )
+        try:
+            probe = subprocess.run(
+                [clang, "-fsyntax-only", flag, "-x", lang, os.devnull],
+                capture_output=True,
+                text=True,
+            )
+        except OSError:
+            # clang рядом нет — спросить не у кого. Молчать об этом нельзя: тогда
+            # непонятно, почему проверка вдруг стала выдавать «unknown argument».
+            if not cache.get("__warned"):
+                print("clang-tidy: %r не запускается, флаги отбираю по запасному списку" % clang)
+                cache["__warned"] = True
+            cache[key] = not flag.startswith(GCC_ONLY_PREFIXES)
+            return cache[key]
         # Нас интересует только «не знаю такого флага». Всё прочее (например, warning
         # на пустой вход) флаг не дискредитирует.
         bad = "unknown argument" in probe.stderr or "unsupported option" in probe.stderr
