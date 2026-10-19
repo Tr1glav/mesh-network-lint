@@ -25,3 +25,16 @@ ignore = [
     "UP031",  # percent format → f-string
 ]
 
+# Скрипты PlatformIO/SCons: имена `env` и `Import` в файле не определены — их впрыскивает
+# SCons при запуске скрипта из platformio.ini, и определить их нечем. Поэтому F821 здесь
+# подавлен адресно, файл за файлом, а не глобально через `builtins`: глобально он скрыл бы
+# настоящую опечатку в любом файле дерева, а внутри этих скриптов (по ~90 строк) риск мал.
+# Новый скрипт SCons надо дописать сюда руками — глоба нет намеренно, чтобы послабление не
+# расползалось на файлы, которым оно не нужно.
+[tool.ruff.lint.per-file-ignores]
+"meshcore-fork/scripts/copy_firmware.py" = ["F821"]
+"meshcore-fork/scripts/gen_version.py" = ["F821"]
+"meshcore-fork/scripts/gen_web.py" = ["F821"]
+"tdeck/scripts/build_apps.py" = ["F821"]
+"tdeck/scripts/copy_firmware.py" = ["F821"]
+"tdeck/scripts/gen_version.py" = ["F821"]

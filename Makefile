@@ -38,9 +38,27 @@ CXX_GENERATED = \
 
 CXX_FILES = $(filter-out $(CXX_GENERATED),$(CXX_ALL))
 
-# Файлы для форматирования Python
-PY_FILES  = $(wildcard mesh-network-tools/*.py) \
-	$(wildcard mesh-network-tools/mcselftest/*.py)
+# Каталоги с НАШИМ Python. Раньше здесь был PY_FILES со списком файлов, и он не
+# использовался ни одной целью: цели перечисляли пути сами, только mesh-network-tools, —
+# то есть 18 своих файлов (скрипты сборки обеих прошивок, host_render, tools/) конвейер не
+# видел вовсе. `make lint-py` давал «All checks passed», пока `ruff check .` из корня
+# показывал 23 замечания ровно в этих файлах.
+#
+# Каталогами, а не списком файлов: новый скрипт в scripts/ тогда попадает под проверку сам,
+# без правки Makefile. Чужой Python из .pio/libdeps ruff не берёт — он в .gitignore прошивок.
+PY_DIRS_ALL = mesh-network-tools \
+	mesh-network-tools/mcselftest \
+	meshcore-fork/scripts \
+	tdeck/scripts \
+	tdeck/host_render \
+	tools
+
+# ...но ruff падает с E902 на пути, которого нет, а в CI рядом лежит РОВНО ОДНА прошивка:
+# workspace собирается из этого репозитория в корне, прошивки и ядра подкаталогами рядом
+# (см. .github/workflows/build.yml прошивок). Список без фильтра означал бы, что сборка
+# tdeck спотыкается на meshcore-fork/scripts и наоборот — то есть красный CI у обеих.
+# $(wildcard) оставляет только существующие каталоги; локально это все шесть.
+PY_DIRS = $(wildcard $(PY_DIRS_ALL))
 
 .PHONY: lint format format-check format-cpp format-cpp-check lint-cpp format-py \
 	format-py-check lint-py
@@ -58,7 +76,7 @@ format-cpp:
 	done
 
 format-py:
-	@$(PY_LINT) format mesh-network-tools/ mesh-network-tools/mcselftest/
+	@$(PY_LINT) format $(PY_DIRS)
 
 format-cpp-check:
 	@for f in $(CXX_FILES); do \
@@ -67,7 +85,7 @@ format-cpp-check:
 	@echo "C++ formatting check passed"
 
 format-py-check:
-	@$(PY_LINT) format --check mesh-network-tools/ mesh-network-tools/mcselftest/
+	@$(PY_LINT) format --check $(PY_DIRS)
 	@echo "Python formatting check passed"
 
 # База компиляции у каждой прошивки своя, пути в ней относительные, а флаги — от
@@ -81,5 +99,5 @@ lint-cpp:
 		$(CXX_FILES)
 
 lint-py:
-	@$(PY_LINT) check mesh-network-tools/ mesh-network-tools/mcselftest/
+	@$(PY_LINT) check $(PY_DIRS)
 
