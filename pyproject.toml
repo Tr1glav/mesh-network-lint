@@ -1,11 +1,15 @@
 [project]
-name = "mesh-network-tools"
+name = "mesh-network-lint"
 version = "0.1.0"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 
 [tool.ruff]
 line-length = 120
-target-version = "py39"
+# Минимум из того, на чём этот код реально запускается: 3.11 в CI обеих прошивок, 3.12 в
+# CI ядра и набора проверок, 3.13+ требует gen_ca_bundle.py. Занижение здесь не ошибка
+# сборки, а молчаливый запрет: ruff не предлагает идиомы новее указанной версии, и правила
+# UP для 3.10+ просто не срабатывают. Поднимать вместе с python-version в workflow.
+target-version = "py311"
 
 [tool.ruff.lint]
 select = [

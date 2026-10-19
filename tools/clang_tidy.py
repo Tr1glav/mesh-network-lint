@@ -21,13 +21,24 @@
 
 Третье: баз несколько (у каждой прошивки своя), и пути внутри них относительные — каждый
 файл надо проверять по базе своего проекта.
+
+Четвёртое: стандартные заголовки компилятор знает сам, и в базе их нет. У xtensa-gcc это
+newlib и его libstdc++, у clang — ХОСТОВЫЕ /usr/include. Поэтому clang разбирал наш код
+против glibc, получал «function-like macro '__GLIBC_USE' is not defined» и «unknown type name
+'__mbstate_t'», а после десятка таких — «too many errors emitted, stopping now»: файл выглядел
+проверенным, а настоящие замечания в нём не считались вовсе (761 clang-diagnostic-error на
+полном прогоне, все в /usr/include). Лечится тем, что стандартный путь включений вырезается
+(-nostdinc), а вместо него подставляются каталоги ЦЕЛЕВОГО компилятора — и спрашиваются они у
+него самого (`-E -v`), а не прописываются руками: версия тулчейна меняется с платформой.
 """
 
 import argparse
 import json
 import os
 import pathlib
+import re
 import shlex
+import shutil
 import subprocess
 import sys
 
@@ -40,6 +51,121 @@ DROP_WITH_VALUE = {"-o", "-MF", "-MT", "-MQ"}
 # останавливается с «unknown argument». Список заведомо неполный: он нужен ровно чтобы
 # проверка не падала целиком, а основной путь — проба у самого clang.
 GCC_ONLY_PREFIXES = ("-mlongcalls", "-mtext-section-literals", "-mfix-esp32", "-fno-tree-", "-fstrict-volatile-")
+
+
+def pio_core():
+    """Каталог пакетов PlatformIO: там живут тулчейны."""
+    return pathlib.Path(os.environ.get("PLATFORMIO_CORE_DIR") or os.path.expanduser("~/.platformio"))
+
+
+def resolve_compiler(argv0):
+    """Абсолютный путь к компилятору из базы или None.
+
+    В базе стоит голое имя (`xtensa-esp32s3-elf-g++`), и на PATH его обычно нет: PlatformIO
+    держит тулчейны у себя и добавляет их в PATH только на время сборки. Поэтому после PATH
+    смотрим в пакеты PlatformIO — у каждой платы свой тулчейн (esp32, esp32s3), и зашивать
+    имя нельзя.
+    """
+    name = os.path.basename(argv0)
+    found = shutil.which(argv0) or shutil.which(name)
+    if found:
+        return found
+    for exe in sorted(pio_core().glob("packages/toolchain-*/bin/" + name)):
+        if os.access(exe, os.X_OK):
+            return str(exe)
+    return None
+
+
+def _ask(compiler, extra, lang):
+    """Вывод компилятора на пустом входе. Пусто — компилятор не ответил."""
+    try:
+        probe = subprocess.run(
+            [compiler, *extra, "-x", lang, os.devnull],
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return probe
+
+
+def _search_dirs(stderr):
+    """Каталоги из блока «#include <...> search starts here» вывода `-E -v`."""
+    dirs, grab = [], False
+    for line in stderr.splitlines():
+        if line.startswith("#include <...>"):
+            grab = True
+        elif line.startswith("End of search list"):
+            break
+        elif grab and line.startswith(" "):
+            d = os.path.normpath(line.strip())
+            if os.path.isdir(d):
+                dirs.append(d)
+    return dirs
+
+
+def _predefines(compiler, lang):
+    """Макросы, которые компилятор определяет сам: {имя: значение}."""
+    probe = _ask(compiler, ["-dM", "-E"], lang)
+    if probe is None or probe.returncode != 0:
+        return {}
+    out = {}
+    for line in probe.stdout.splitlines():
+        m = re.match(r"#define (\S+)(?: (.*))?$", line)
+        if m:
+            out[m.group(1)] = m.group(2) or ""
+    return out
+
+
+def target_env(argv0, clang, lang, cache):
+    """Флаги, которыми clang притворяется целевым компилятором. Пусто — притворяться нечем.
+
+    Три вещи, которых в базе компиляции нет, потому что компилятор знает их сам:
+
+    1. **Стандартные заголовки.** У xtensa-gcc это newlib и его libstdc++, у clang —
+       хостовые /usr/include. Поэтому `-nostdinc` плюс каталоги целевого компилятора,
+       спрошенные у него же (`-E -v`).
+    2. **Разрядность.** Указатель на цели 4 байта, на хосте 8. Без `-m32` хостовый clang
+       честно ругается на приведение указателя к uint32_t в заголовках ESP-IDF — это не
+       наш баг, а разница моделей.
+    3. **Опознавательные макросы.** Заголовки ветвятся по `__XTENSA__`: в ветке «не
+       xtensa» лежат includes вида `"../hal.h"`, которых в этой раскладке SDK нет, и
+       разбор падает с «file not found» на первом же Arduino.h.
+
+    Макросы берутся не списком, а разностью: что целевой компилятор определяет, а clang
+    нет. Из разности оставляются только **признаки** (значение пустое или 1) — те, по
+    которым ветвятся `#ifdef`. Числовые пределы (`__FLT32_MAX__`, `__DEC64_*`) отбрасываются
+    намеренно: подменять ими модель чисел clang'а незачем, а сломать разбор заголовков ими
+    легко. Такой отбор переживёт смену тулчейна — для esp32c3 он даст `__riscv` сам, без
+    правки скрипта.
+    """
+    key = ("env", argv0, lang)
+    if key in cache:
+        return cache[key]
+    compiler = resolve_compiler(argv0)
+    flags = []
+    if compiler:
+        probe = _ask(compiler, ["-E", "-v"], lang)
+        dirs = _search_dirs(probe.stderr) if probe is not None else []
+        if dirs:
+            flags.append("-nostdinc")
+            for d in dirs:
+                flags += ["-isystem", d]
+            target = _predefines(compiler, lang)
+            host = _predefines(clang, lang)
+            if host and target.get("__SIZEOF_POINTER__") == "4" and flag_accepted(clang, "-m32", lang, cache):
+                flags.append("-m32")
+            for name, value in sorted(target.items()):
+                if name not in host and value in ("", "1"):
+                    flags.append("-D%s=1" % name if value else "-D" + name)
+    if not flags and not cache.get("__env_warned"):
+        print(
+            "clang-tidy: %r не найден или не отвечает — разбор пойдёт против ХОСТОВЫХ "
+            "заголовков, и часть замечаний не посчитается" % argv0
+        )
+        cache["__env_warned"] = True
+    cache[key] = flags
+    return flags
 
 
 def language_of(path):
@@ -76,6 +202,10 @@ def sanitize(entry, clang, cache):
     argv = entry.get("arguments") or shlex.split(entry["command"])
     lang = language_of(entry["file"])
     out = [argv[0]]
+    # Чем clang отличается от целевого компилятора: заголовки, разрядность, опознавательные
+    # макросы. Место флагов в строке не важно — -isystem системный, и clang смотрит его
+    # ПОСЛЕ всех -I проекта, поэтому свои заголовки по-прежнему находятся первыми.
+    out += target_env(argv[0], clang, lang, cache)
     skip_value = False
     for arg in argv[1:]:
         if skip_value:
